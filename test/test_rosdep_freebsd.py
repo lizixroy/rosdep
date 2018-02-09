@@ -1,4 +1,4 @@
-# Copyright (c) 2009, Willow Garage, Inc.
+# Copyright (c) 2011, Willow Garage, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -25,50 +25,51 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Author Tully Foote/tfoote@willowgarage.com
+# Copied from test_rosdep_suse.py by Author Ken Conley/kwc@willowgarage.com
+# Converted to FreeBSD by Trenton Schulz/trentonw@ifi.uio.no
 
-import subprocess
-
-from rospkg.os_detect import OS_OPENSUSE
-
-from .source import SOURCE_INSTALLER
-from ..installers import PackageManagerInstaller
-
-# zypper package manager key
-ZYPPER_INSTALLER = 'zypper'
+import os
+import traceback
+from mock import patch, Mock
 
 
-def register_installers(context):
-    context.set_installer(ZYPPER_INSTALLER, ZypperInstaller())
+def get_test_dir():
+    # not used yet
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), 'freebsd'))
 
 
-def register_platforms(context):
-    context.add_os_installer_key(OS_OPENSUSE, SOURCE_INSTALLER)
-    context.add_os_installer_key(OS_OPENSUSE, ZYPPER_INSTALLER)
-    context.set_default_os_installer_key(OS_OPENSUSE, lambda self: ZYPPER_INSTALLER)
+def test_pkg_detect():
+    from rosdep2.platforms.freebsd import pkg_detect
+
+    m = Mock()
+    m.return_value = ''
+
+    val = pkg_detect([], exec_fn=m)
+    assert val == [], val
+
+    val = pkg_detect(['tinyxml'], exec_fn=m)
+    assert val == [], val
 
 
-def rpm_detect(packages):
-    installed = []
-    for p in packages:
-        if not subprocess.call(['rpm', '-q', p]):
-            installed.append(p)
-    return installed
+def test_PkgInstaller():
+    from rosdep2.platforms.freebsd import PkgInstaller
 
+    @patch.object(PkgInstaller, 'get_packages_to_install')
+    def test(mock_method):
+        installer = PkgInstaller()
+        mock_method.return_value = []
+        assert [] == installer.get_install_command(['fake'])
 
-class ZypperInstaller(PackageManagerInstaller):
-    """
-    This class provides the functions for installing using zypper.
-    """
-
-    def __init__(self):
-        super(ZypperInstaller, self).__init__(rpm_detect)
-
-    def get_install_command(self, resolved, interactive=True, reinstall=False, quiet=False):
-        packages = self.get_packages_to_install(resolved, reinstall=reinstall)
-        if not packages:
-            return []
-        if not interactive:
-            return [self.elevate_priv(['zypper', 'install', '-yl']) + packages]
-        else:
-            return [self.elevate_priv(['zypper', 'install']) + packages]
+        # no interactive option with YUM
+        mock_method.return_value = ['a', 'b']
+        expected = [['sudo', '-H', '/usr/sbin/pkg', 'install', '-y', 'a', 'b']]
+        val = installer.get_install_command(['whatever'], interactive=False)
+        assert val == expected, val
+        expected = [['sudo', '-H', '/usr/sbin/pkg', 'install', '-y', 'a', 'b']]
+        val = installer.get_install_command(['whatever'], interactive=True)
+        assert val == expected, val
+    try:
+        test()
+    except AssertionError:
+        traceback.print_exc()
+        raise

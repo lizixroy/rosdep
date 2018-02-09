@@ -1,9 +1,9 @@
 # Copyright (c) 2011, Willow Garage, Inc.
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-# 
+#
 #     * Redistributions of source code must retain the above copyright
 #       notice, this list of conditions and the following disclaimer.
 #     * Redistributions in binary form must reproduce the above copyright
@@ -12,7 +12,7 @@
 #     * Neither the name of the Willow Garage, Inc. nor the names of its
 #       contributors may be used to endorse or promote products derived from
 #       this software without specific prior written permission.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -31,29 +31,56 @@ import os
 import traceback
 from mock import Mock, patch
 
+
 def get_test_dir():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), 'debian'))
 
+
 def test_dpkg_detect():
     from rosdep2.platforms.debian import dpkg_detect
-    
+
     m = Mock()
-    m.return_value = ''
+    m.return_value = '', ''
     val = dpkg_detect([], exec_fn=m)
     assert val == [], val
 
     val = dpkg_detect(['tinyxml-dev'], exec_fn=m)
     assert val == [], val
-    #assert m.assert_called_with(['dpkg-query', '-W', '-f=\'${Package} ${Status}\n\''])
+    # assert m.assert_called_with(['dpkg-query', '-W', '-f=\'${Package} ${Status}\n\''])
 
     with open(os.path.join(get_test_dir(), 'dpkg-python-apt'), 'r') as f:
-        m.return_value = f.read()
+        m.return_value = f.read(), ''
     val = dpkg_detect(['apt', 'tinyxml-dev', 'python'], exec_fn=m)
     assert val == ['apt', 'python'], val
 
     # test version lock code (should be filtered out w/o validation)
     val = dpkg_detect(['apt=1.8', 'tinyxml-dev', 'python=2.7'], exec_fn=m)
     assert val == ['apt=1.8', 'python=2.7'], val
+
+
+def test_read_apt_cache_showpkg():
+    from rosdep2.platforms.debian import _read_apt_cache_showpkg
+
+    m = Mock()
+    with open(os.path.join(get_test_dir(), 'showpkg-curl-wget-libcurl-dev'), 'r') as f:
+        m.return_value = f.read()
+
+    results = list(_read_apt_cache_showpkg(['curl', 'wget', 'libcurl-dev'], exec_fn=m))
+    assert len(results) == 3, results
+
+    package, virtual, providers = results[0]
+    assert package == 'curl', package
+    assert not virtual
+    assert providers is None, providers
+
+    package, virtual, providers = results[1]
+    assert package == 'wget', package
+    assert not virtual
+    assert providers is None, providers
+
+    package, virtual, providers = results[2]
+    assert package == 'libcurl-dev', package
+    assert virtual, providers
 
 
 def test_AptInstaller():
@@ -69,7 +96,7 @@ def test_AptInstaller():
         expected = [['sudo', '-H', 'apt-get', 'install', '-y', 'a'],
                     ['sudo', '-H', 'apt-get', 'install', '-y', 'b']]
         val = installer.get_install_command(['whatever'], interactive=False)
-        print("VAL", val)
+        print('VAL', val)
         assert val == expected, val
         expected = [['sudo', '-H', 'apt-get', 'install', 'a'],
                     ['sudo', '-H', 'apt-get', 'install', 'b']]
@@ -80,4 +107,3 @@ def test_AptInstaller():
     except AssertionError:
         traceback.print_exc()
         raise
-    
